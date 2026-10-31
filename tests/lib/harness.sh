@@ -7,6 +7,7 @@ set -euo pipefail
 WPAL_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEST_HOME="$HOME/wpal-test-home"
 HYPR_LOG="/tmp/wpal-test-hypr.log"
+HYPR_CONF="$TEST_HOME/.config/hypr/hyprland.lua"
 
 harness_load_calibration() {
   local calib_file="$WPAL_REPO/tests/lib/calibration/$(hostname).env"
@@ -117,12 +118,19 @@ PY
   ln -sfn "$TEST_HOME/.local/state/omarchy/current/theme/backgrounds/1-cosmic.jpg" \
      "$TEST_HOME/.local/state/omarchy/current/background"
 
-  cat > "$TEST_HOME/.config/hypr/hyprland.conf" <<'EOF'
-monitor=WAYLAND-1,1600x900@60,0x0,1
-exec-once = quickshell -n -p /usr/share/omarchy/shell
-general { gaps_in = 0 gaps_out = 0 }
-decoration { rounding = 0 }
-animations { enabled = false }
+  # Lua config, same as the real Omarchy desktop -- `hyprctl eval` and the
+  # hl.dsp.* dispatchers only exist under the Lua config manager (a .conf
+  # boot answers "eval is only supported with the lua config manager").
+  cat > "$HYPR_CONF" <<'EOF'
+hl.monitor({ output = "WAYLAND-1", mode = "1600x900@60", position = "0x0", scale = 1 })
+hl.config({
+  general = { gaps_in = 0, gaps_out = 0 },
+  decoration = { rounding = 0 },
+  animations = { enabled = false },
+})
+hl.on("hyprland.start", function()
+  hl.exec_cmd("quickshell -n -p /usr/share/omarchy/shell")
+end)
 EOF
 
   local before_hypr before_qs
@@ -138,7 +146,7 @@ EOF
   # noise, not the cause of the real intermittent failures below.
   HOME="$TEST_HOME" WLR_BACKENDS=headless XDG_RUNTIME_DIR=/run/user/1000 \
     OMARCHY_PATH=/usr/share/omarchy \
-    Hyprland --config "$TEST_HOME/.config/hypr/hyprland.conf" \
+    Hyprland --config "$HYPR_CONF" \
     > "$HYPR_LOG" 2>&1 &
   disown
 
@@ -155,7 +163,7 @@ EOF
   fi
 
   local hypr_pid
-  hypr_pid=$(pgrep -f "Hyprland --config $TEST_HOME/.config/hypr/hyprland.conf" | head -1 || true)
+  hypr_pid=$(pgrep -f "Hyprland --config $HYPR_CONF" | head -1 || true)
   if [[ -z "$hypr_pid" ]]; then
     return 1
   fi
@@ -205,7 +213,7 @@ EOF
 # instance to exit lets it shut Xwayland and its clients down cleanly.
 # SIGKILL stays as the fallback for a wedged instance.
 harness_teardown() {
-  local hypr_match="Hyprland --config $TEST_HOME/.config/hypr/hyprland.conf"
+  local hypr_match="Hyprland --config $HYPR_CONF"
   local pids
 
   # 1. Ask the nested compositor to exit. -i targets ONLY the nested
@@ -324,3 +332,6 @@ except Exception:
     print('null')
 "
 }
+
+# hyprctl against the NESTED compositor only -- never the real session.
+harness_hyprctl() { HYPRLAND_INSTANCE_SIGNATURE="$NESTED_SIG" hyprctl "$@"; }
