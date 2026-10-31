@@ -120,6 +120,17 @@ BarWidget {
     // Read-only query for the click-through test suite (tests/) -- lets a
     // script assert open/closed state without screenshot diffing.
     function isOpen(): bool { return root.opened }
+    // Scriptable settings, routed through the same Panel functions the
+    // panel's own toggles call, so the write guard and settings relay run
+    // exactly as they do for a click. Also what the key-free test
+    // scenarios drive instead of faking keypresses.
+    function setEnabled(v: bool): bool {
+      return panelLoader.item ? panelLoader.item.setMasterEnabled(v) !== false : false
+    }
+    function setAutoLaunch(v: bool): bool {
+      return panelLoader.item ? panelLoader.item.setAutoLaunchEnabled(v) !== false : false
+    }
+    function getSettings(): string { return JSON.stringify(root.settings || {}) }
   }
 
   BarIconButton {

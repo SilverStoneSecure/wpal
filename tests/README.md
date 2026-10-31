@@ -9,19 +9,31 @@ real desktop, settings, or wallpaper.
 ## Run it
 
 ```
-./tests/run.sh            # all scenarios
-./tests/run.sh fresh-install
-./tests/run.sh escape-cascade
-./tests/run.sh replacement-bar
+./tests/run.sh               # key-free scenarios (safe while you use the desktop)
+./tests/run.sh keyed         # scenarios that fake keypresses (hands off the keyboard)
+./tests/run.sh everything    # both
+./tests/run.sh settings-write   # any single scenario by name
 ```
+
+**Key-free** scenarios drive wpal only through its IPC verbs
+(`qs ipc call silverstone …`) and read results back from `shell.json` /
+`hyprctl`. Nothing is typed or clicked on the real session, so they can run
+while someone is working. **Keyed** scenarios use ydotool, whose keypresses
+land in whatever window has focus — run them only when nobody's at the
+keyboard.
 
 ## Requirements
 
-- `ss-onboard-remote-screen-control` has been run on this machine at least
-  once (ydotool + `/dev/uinput` access).
-- A calibration file at `tests/lib/calibration/<hostname>.env` — see
-  `T420.env`. Missing file = clear error pointing at onboarding, not a
-  silent wrong-coordinate click.
+- A live Hyprland session to nest inside (the T420).
+- Keyed scenarios only: `ss-onboard-remote-screen-control` has been run on
+  this machine (ydotool + `/dev/uinput` access), and a calibration file at
+  `tests/lib/calibration/<hostname>.env` — see `T420.env`.
+
+## IPC verbs (BarWidget.qml, target `silverstone`)
+
+`open` · `close` · `toggle` · `isOpen` · `setEnabled <bool>` ·
+`setAutoLaunch <bool>` · `getSettings` — the setters call the same Panel
+functions as the panel's own toggles.
 
 ## Layout
 
@@ -34,6 +46,10 @@ real desktop, settings, or wallpaper.
   not asserted on by the scripts themselves.
 
 ## Scenarios so far
+
+- `settings-write` (key-free) — regression test for PR #6: after a fresh
+  install's seed, flips `enabled` and `autoLaunchEnabled` over IPC and
+  confirms both persist (the old guard refused every such write).
 
 - `fresh-install` — boots from a bare `{"id": "io.github.silverstone.wpal"}` entry,
   confirms `globalOverride` seeds correctly with no clicks needed.

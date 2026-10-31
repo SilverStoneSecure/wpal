@@ -107,8 +107,12 @@ with open(out, "w") as f:
     json.dump(d, f, indent=2)
 PY
 
-  cp /usr/share/omarchy/themes/ethereal/backgrounds/1-cosmic.jpg \
-     "$TEST_HOME/.local/state/omarchy/current/theme/backgrounds/"
+  # Any shipped theme wallpaper will do; it's stored under the fixed name
+  # the scenarios assert on. (ethereal/1-cosmic.jpg was dropped from
+  # Omarchy's themes by 4.5.)
+  local fixture_bg
+  fixture_bg=$(ls /usr/share/omarchy/themes/*/backgrounds/*.{jpg,png} 2>/dev/null | head -1)
+  cp "$fixture_bg" "$TEST_HOME/.local/state/omarchy/current/theme/backgrounds/1-cosmic.jpg"
   echo -n "ethereal" > "$TEST_HOME/.local/state/omarchy/current/theme.name"
   ln -sfn "$TEST_HOME/.local/state/omarchy/current/theme/backgrounds/1-cosmic.jpg" \
      "$TEST_HOME/.local/state/omarchy/current/background"
@@ -193,16 +197,47 @@ EOF
 # isn't) -- found 2026-10-05 when teardown silently failed every run and
 # orphaned nested Hyprland/quickshell processes kept accumulating, each
 # holding its own wayland-N socket. Find PIDs with pgrep, kill them by PID.
+#
+# Graceful first: SIGKILLing the nested Hyprland leaves its Xwayland (:1)
+# with a dead Wayland connection, and since Hyprland starts it with -core,
+# Xwayland abort()s and dumps core -- a "Process crashed: Xwayland"
+# notification on every run (diagnosed 2026-10-31). Asking the nested
+# instance to exit lets it shut Xwayland and its clients down cleanly.
+# SIGKILL stays as the fallback for a wedged instance.
 harness_teardown() {
+  local hypr_match="Hyprland --config $TEST_HOME/.config/hypr/hyprland.conf"
   local pids
-  pids=$(pgrep -f "Hyprland --config $TEST_HOME/.config/hypr/hyprland.conf" 2>/dev/null || true)
+
+  # 1. Ask the nested compositor to exit. -i targets ONLY the nested
+  #    instance by its signature, never the real session.
+  if [[ -n "${NESTED_SIG:-}" ]] && pgrep -f "$hypr_match" >/dev/null 2>&1; then
+    XDG_RUNTIME_DIR=/run/user/1000 hyprctl -i "$NESTED_SIG" dispatch exit >/dev/null 2>&1 || true
+    for _ in $(seq 1 25); do
+      pgrep -f "$hypr_match" >/dev/null 2>&1 || break
+      sleep 0.2
+    done
+  fi
+
+  # 2. Still up (no signature, or IPC wedged): SIGTERM, which Hyprland also
+  #    handles as a clean shutdown.
+  pids=$(pgrep -f "$hypr_match" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    for pid in $pids; do kill -TERM "$pid" 2>/dev/null || true; done
+    for _ in $(seq 1 15); do
+      pgrep -f "$hypr_match" >/dev/null 2>&1 || break
+      sleep 0.2
+    done
+  fi
+
+  # 3. Last resort, and sweep any stragglers still tied to the test HOME.
+  pids=$(pgrep -f "$hypr_match" 2>/dev/null || true)
   pids="$pids $(pgrep -f "$TEST_HOME" 2>/dev/null || true)"
   for pid in $pids; do
     kill -9 "$pid" 2>/dev/null || true
   done
 
   for _ in $(seq 1 25); do
-    pgrep -f "Hyprland --config $TEST_HOME/.config/hypr/hyprland.conf" >/dev/null 2>&1 || break
+    pgrep -f "$hypr_match" >/dev/null 2>&1 || break
     sleep 0.2
   done
 
@@ -258,4 +293,34 @@ for entry in d.get('bar', {}).get('layout', {}).get('right', []):
 
 harness_log_grep() {
   WAYLAND_DISPLAY="$NESTED_WAYLAND_DISPLAY" qs log -i "$NESTED_QS_ID" 2>/dev/null | grep -F "$1" || true
+}
+
+# Waits for the one-time globalOverride seed a fresh install writes on boot.
+# Prints the seeded path, or nothing on timeout.
+harness_wait_seed() {
+  local seeded=""
+  for _ in $(seq 1 25); do
+    seeded=$(harness_shell_json | python3 -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read()).get('globalOverride', ''))
+except Exception:
+    print('')
+")
+    [[ -n "$seeded" ]] && break
+    sleep 0.4
+  done
+  echo "$seeded"
+}
+
+# Reads one top-level key of wpal's stored shell.json entry as JSON
+# (null when absent).
+harness_entry_key() {
+  harness_shell_json | python3 -c "
+import json, sys
+try:
+    print(json.dumps(json.loads(sys.stdin.read()).get('$1')))
+except Exception:
+    print('null')
+"
 }

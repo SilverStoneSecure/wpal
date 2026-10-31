@@ -614,11 +614,11 @@ Panel {
     // recreates this panel and would otherwise restore the stale dialog.
     root.pendingBrowse = null
     root.closeDialog()
-    root.patchEntry(function(entry) { entry.enabled = v })
+    return root.patchEntry(function(entry) { entry.enabled = v })
   }
 
   function setAutoLaunchEnabled(v) {
-    root.patchEntry(function(entry) { entry.autoLaunchEnabled = v })
+    return root.patchEntry(function(entry) { entry.autoLaunchEnabled = v })
   }
 
   function setStartupCustom(v) {
