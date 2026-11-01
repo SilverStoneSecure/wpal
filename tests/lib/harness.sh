@@ -128,6 +128,10 @@ hl.config({
   decoration = { rounding = 0 },
   animations = { enabled = false },
 })
+-- Omarchy's curves (default/hypr/looknfeel.lua), which wpal-pad.sh's slide
+-- animation names.
+hl.curve("easeOutQuint", { type = "bezier", points = { { 0.23, 1 }, { 0.32, 1 } } })
+hl.curve("easeInOutCubic", { type = "bezier", points = { { 0.65, 0.05 }, { 0.36, 1 } } })
 hl.on("hyprland.start", function()
   hl.exec_cmd("quickshell -n -p /usr/share/omarchy/shell")
 end)
@@ -144,7 +148,7 @@ EOF
   # failed!") -- don't touch it. The "unable to lock lockfile
   # wayland-1.lock" line that shows up in the log either way is benign
   # noise, not the cause of the real intermittent failures below.
-  HOME="$TEST_HOME" WLR_BACKENDS=headless XDG_RUNTIME_DIR=/run/user/1000 \
+  HOME="$TEST_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" WLR_BACKENDS=headless XDG_RUNTIME_DIR=/run/user/1000 \
     OMARCHY_PATH=/usr/share/omarchy \
     Hyprland --config "$HYPR_CONF" \
     > "$HYPR_LOG" 2>&1 &
@@ -335,3 +339,39 @@ except Exception:
 
 # hyprctl against the NESTED compositor only -- never the real session.
 harness_hyprctl() { HYPRLAND_INSTANCE_SIGNATURE="$NESTED_SIG" hyprctl "$@"; }
+
+# Runs scripts/wpal-pad.sh against the NESTED compositor, as if a key bound
+# to it had been pressed inside the test desktop.
+harness_pad() {
+  HOME="$TEST_HOME" HYPRLAND_INSTANCE_SIGNATURE="$NESTED_SIG" WAYLAND_DISPLAY="$NESTED_WAYLAND_DISPLAY" \
+    XDG_STATE_HOME="$TEST_HOME/.local/state" bash "$WPAL_REPO/scripts/wpal-pad.sh" "$@"
+}
+
+# Count of nested clients whose class is $1 [on workspace name $2].
+harness_count_class() {
+  harness_hyprctl clients -j 2>/dev/null | jq --arg c "$1" --arg w "${2:-}" \
+    '[.[] | select(.class == $c and ($w == "" or .workspace.name == $w))] | length'
+}
+
+# The special workspace currently open on the nested monitor ("" if none).
+harness_open_pad() {
+  harness_hyprctl monitors -j 2>/dev/null | jq -r '.[0].specialWorkspace.name'
+}
+
+# Safety net: a test window must never reach the REAL desktop. Closes any
+# real-session client of class $1 and reports whether one was found.
+harness_leaked_class() {
+  local addrs
+  addrs=$(hyprctl clients -j 2>/dev/null | jq -r --arg c "$1" '.[] | select(.class == $c) | .address')
+  [[ -z $addrs ]] && return 1
+  for a in $addrs; do hyprctl dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null 2>&1; done
+  return 0
+}
+
+# Closes every NESTED client of class $1, by address (not "whatever has focus").
+harness_close_class() {
+  local a
+  for a in $(harness_hyprctl clients -j 2>/dev/null | jq -r --arg c "$1" '.[] | select(.class == $c) | .address'); do
+    harness_hyprctl dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null 2>&1
+  done
+}

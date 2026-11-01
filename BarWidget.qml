@@ -131,6 +131,14 @@ BarWidget {
       return panelLoader.item ? panelLoader.item.setAutoLaunchEnabled(v) !== false : false
     }
     function getSettings(): string { return JSON.stringify(root.settings || {}) }
+    // Patch one scratchpad's settings: key S/W, patch a JSON object with any
+    // of panes, autoLaunchEnabled, launchLayout, fullScreenIndex, slideFrom.
+    function setPad(key: string, patch: string): bool {
+      if (!panelLoader.item) return false
+      var obj
+      try { obj = JSON.parse(patch) } catch (e) { return false }
+      return panelLoader.item.updatePad(String(key).toUpperCase(), obj || {}) !== false
+    }
   }
 
   BarIconButton {

@@ -11,7 +11,9 @@
 # below) are left on stderr on purpose -- Service.qml logs them to the
 # journal rather than hiding a failing launch.
 #
-# Args: $1 = workspace id, $2 = base64-encoded JSON array of
+# Args: $1 = workspace id (1-10), or a scratchpad's special workspace name
+#            ("special:scratchpad", "special:pad-w") -- run by that pad's
+#            Hyprland on_created_empty rule (Service.applyPadRules), $2 = base64-encoded JSON array of
 #            {"type":"app|webapp|terminal|command","value":"...","args":"..."},
 #            1-4 entries. args is optional extra shell args tacked onto an
 #            app/command launch (see Model.js classifyPane).
@@ -39,9 +41,19 @@ fs_index="${4:--1}"
 wait_ticks="${WPAL_WAIT_TICKS:-200}"
 [[ $wait_ticks =~ ^[0-9]+$ ]] || wait_ticks=200
 
+# A numbered workspace is matched by id, a scratchpad by its special name.
+if [[ $ws == special:* ]]; then
+  ws_match='.workspace.name == $w'
+  ws_arg=(--arg w "$ws")
+else
+  [[ $ws =~ ^[0-9]+$ ]] || exit 0
+  ws_match='.workspace.id == $w'
+  ws_arg=(--argjson w "$ws")
+fi
+
 # Re-check emptiness right before acting -- closes the race between the
 # reactive trigger in Service.qml and this script actually running.
-[[ $(hyprctl clients -j 2>/dev/null | jq --argjson w "$ws" '[.[]|select(.workspace.id==$w)]|length') == 0 ]] || exit 0
+[[ $(hyprctl clients -j 2>/dev/null | jq "${ws_arg[@]}" "[.[]|select($ws_match)]|length") == 0 ]] || exit 0
 
 panes_json=$(base64 -d <<<"$panes_b64" 2>/dev/null) || exit 0
 count=$(jq 'length' <<<"$panes_json" 2>/dev/null) || exit 0
@@ -53,13 +65,21 @@ pane_type() { jq -r ".[$1].type // \"\"" <<<"$panes_json"; }
 pane_value() { jq -r ".[$1].value // \"\"" <<<"$panes_json"; }
 pane_args() { jq -r ".[$1].args // \"\"" <<<"$panes_json"; }
 
-snapshot() { hyprctl clients -j 2>/dev/null | jq -c --argjson w "$ws" '[.[]|select(.workspace.id==$w)|.address]'; }
+snapshot() { hyprctl clients -j 2>/dev/null | jq -c "${ws_arg[@]}" "[.[]|select($ws_match)|.address]"; }
 
 # Still looking at the workspace we are furnishing? Windows are spawned onto
 # whatever is FOCUSED, so if the user walks away mid-run the rest of the panes
 # would land on top of whatever they walked to. Nothing is more important than
 # not touching another workspace (the hard rule), so the run stops instead.
-on_target() { [[ $(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id') == "$ws" ]]; }
+# A scratchpad counts as on screen while it's the focused monitor's open
+# special workspace.
+on_target() {
+  if [[ $ws == special:* ]]; then
+    [[ $(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .specialWorkspace.name') == "$ws" ]]
+  else
+    [[ $(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id') == "$ws" ]]
+  fi
+}
 
 # Opens the user's default terminal (whatever xdg-terminal-exec resolves),
 # optionally running a command. Called directly instead of through

@@ -566,6 +566,28 @@ Panel {
     }
   }
 
+  // ---- scratchpads (see Model.js "scratchpads") ----
+  function padSetting(key) { return Model.padSetting(root.settings, key) }
+
+  // Same merge-then-write as updateWorkspace, for one pad. Pads have no
+  // background, so unlike a workspace edit this doesn't flip the master
+  // mode: a pad's auto-launch works in either mode.
+  function updatePad(key, patch) {
+    if (!Model.isPadKey(key)) return false
+    var cur = root.padSetting(key)
+    var merged = {
+      panes: patch.panes !== undefined ? patch.panes : cur.panes,
+      autoLaunchEnabled: patch.autoLaunchEnabled !== undefined ? patch.autoLaunchEnabled : cur.autoLaunchEnabled,
+      launchLayout: patch.launchLayout !== undefined ? patch.launchLayout : cur.launchLayout,
+      fullScreenIndex: patch.fullScreenIndex !== undefined ? patch.fullScreenIndex : cur.fullScreenIndex,
+      slideFrom: (patch.slideFrom === "top" || patch.slideFrom === "bottom") ? patch.slideFrom : cur.slideFrom
+    }
+    return root.patchEntry(function(entry) {
+      if (!Util.isPlainObject(entry.pads)) entry.pads = {}
+      entry.pads[key] = merged
+    })
+  }
+
   // "Clone this Workspace": copies one workspace's whole config (wallpaper
   // source + picks, launchers, Auto Launch pause) onto each target, in ONE
   // settings write -- separate updateWorkspace calls would each rebuild the

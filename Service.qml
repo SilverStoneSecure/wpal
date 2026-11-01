@@ -632,6 +632,8 @@ Item {
 
   function handleHyprlandEvent(event) {
     var name = String(event && event.name ? event.name : "")
+    // Rules added through `hyprctl eval` don't survive a config reload.
+    if (name === "configreloaded") { service.applyPadRules(); return }
     if (name !== "openwindow") return
     var parts = event.parse ? event.parse(4) : String(event && event.data ? event.data : "").split(",")
     if (String(parts[2] || "") === "org.omarchy.screensaver") service.screensaverActivated()
@@ -684,10 +686,60 @@ Item {
   onSettingsChanged: {
     if (Model.hasWorkspaceData(service.settings)) service.sawWorkspaces = true
     service._applyBootBackgroundOnce()
+    service.writePadPlans()
+  }
+
+  // ---- scratchpads -------------------------------------------------------
+  // wpal never binds keys: users bind one to scripts/wpal-pad.sh <KEY> (see
+  // README). What lives here is each pad's auto-launch. Every pad gets one
+  // fixed Hyprland workspace rule -- on_created_empty runs
+  // `wpal-pad.sh launch <KEY>`, so Hyprland itself fires it exactly when the
+  // pad opens with nothing on it -- and the script reads the pad's current
+  // launch plan from a state file written below. Editing a pad therefore
+  // never has to rewrite a rule.
+
+  readonly property string padScriptPath: {
+    var u = Qt.resolvedUrl("scripts/wpal-pad.sh").toString()
+    return decodeURIComponent(u.replace(/^file:\/\//, ""))
+  }
+  readonly property string padStateDir: (Quickshell.env("XDG_STATE_HOME") || (service.home + "/.local/state")) + "/wpal/pads"
+
+  function applyPadRules() {
+    var lua = Model.padKeys().map(function(key) {
+      return "hl.workspace_rule({ workspace = " + JSON.stringify(Model.padWorkspace(key))
+        + ", on_created_empty = " + JSON.stringify("bash '" + service.padScriptPath + "' launch " + key) + " })"
+    }).join("\n")
+    padRuleProc.command = ["hyprctl", "eval", lua]
+    padRuleProc.running = true
+  }
+  Process { id: padRuleProc }
+
+  // Only rewritten when a plan actually changes; every settings push lands
+  // here, most of them about workspaces.
+  property string _padPlansWritten: ""
+  property bool _padPlanPending: false
+  function writePadPlans() {
+    if (padPlanProc.running) { service._padPlanPending = true; return }
+    var args = []
+    Model.padKeys().forEach(function(key) {
+      args.push(key, JSON.stringify(Model.padPlan(service.settings, key)))
+    })
+    var sig = args.join("\u0001")
+    if (sig === service._padPlansWritten) return
+    service._padPlansWritten = sig
+    padPlanProc.command = ["sh", "-c",
+      'd=$1; shift; mkdir -p "$d" || exit 1; while [ $# -gt 1 ]; do printf "%s" "$2" > "$d/$1.json.tmp" && mv "$d/$1.json.tmp" "$d/$1.json"; shift 2; done',
+      "sh", service.padStateDir].concat(args)
+    padPlanProc.running = true
+  }
+  Process {
+    id: padPlanProc
+    onExited: if (service._padPlanPending) { service._padPlanPending = false; service.writePadPlans() }
   }
 
   Component.onCompleted: {
     console.log("silverstone: Service.qml instantiated")
     Qt.callLater(service.fetchRepoIfUrl)
+    Qt.callLater(service.applyPadRules)
   }
 }

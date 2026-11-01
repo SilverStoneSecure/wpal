@@ -322,3 +322,69 @@ function storedEntry(text, id) {
   }
   return null
 }
+
+// ---- scratchpads -----------------------------------------------------------
+// A scratchpad ("pad") is a Hyprland special workspace that slides over the
+// current one and tucks away again. wpal never binds keys itself: the user
+// binds a key to `scripts/wpal-pad.sh <key>` in their own Hyprland config.
+// What wpal owns is each pad's auto-launch (same pane editor and settings
+// shape as a numbered workspace, minus the background) and the direction it
+// slides in from.
+//
+// S is Omarchy's own scratchpad (Super+S, special:scratchpad), so a user who
+// never rebinds anything still gets S's auto-launch. Other pads are named
+// pad-<key>. The keys follow WASD; only S and W ship for now.
+var PAD_KEYS = ["S", "W"]
+
+function padKeys() { return PAD_KEYS.slice() }
+
+function isPadKey(key) { return PAD_KEYS.indexOf(String(key)) !== -1 }
+
+function padWorkspace(key) {
+  return "special:" + (key === "S" ? "scratchpad" : "pad-" + String(key).toLowerCase())
+}
+
+// Where a pad slides in from when nobody's picked: S rises from the bottom,
+// everything else drops from the top.
+function padDefaultSlide(key) { return key === "S" ? "bottom" : "top" }
+
+// One pad's settings with defaults filled in -- the pad counterpart of
+// Service.wsConfig / Panel.wsSetting, same keys minus `background`.
+function padSetting(settings, key) {
+  var pads = settings && settings.pads
+  var p = (pads && typeof pads === "object") ? pads[key] : null
+  var panesRaw = p && p.panes ? JSON.parse(JSON.stringify(p.panes)) : null
+  var slide = p && (p.slideFrom === "top" || p.slideFrom === "bottom") ? p.slideFrom : padDefaultSlide(key)
+  return {
+    key: key,
+    workspace: padWorkspace(key),
+    slideFrom: slide,
+    panes: normalizePanes(panesRaw),
+    autoLaunchEnabled: !p || p.autoLaunchEnabled !== false,
+    launchLayout: (p && p.launchLayout) | 0,
+    fullScreenIndex: normalizeFullScreenIndex(panesRaw,
+      (p && typeof p.fullScreenIndex === "number") ? p.fullScreenIndex : -1)
+  }
+}
+
+// What scripts/wpal-pad.sh needs for one pad, written to a small state file
+// by Service whenever settings change: where it slides from, and the
+// workspace-autolaunch.sh arguments to furnish it when it opens empty
+// (`panes` null when nothing should launch). The global Auto Launch switch
+// and the pad's own pause both apply, same as a numbered workspace.
+function padPlan(settings, key) {
+  var cfg = padSetting(settings, key)
+  var globalOn = !settings || settings.autoLaunchEnabled !== false
+  var active = configuredPanes(cfg.panes)
+  var launch = globalOn && cfg.autoLaunchEnabled && active.length > 0
+  var fs = cfg.fullScreenIndex
+  if (fs >= active.length) fs = -1
+  return {
+    key: key,
+    workspace: cfg.workspace,
+    slideFrom: cfg.slideFrom,
+    panes: launch ? active.map(classifyPane) : null,
+    layout: launch ? launchLayoutIndex(active.length, cfg.launchLayout) : 0,
+    fullScreenIndex: launch ? fs : -1
+  }
+}
