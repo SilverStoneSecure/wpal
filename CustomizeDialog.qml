@@ -17,6 +17,13 @@ Item {
   property string moduleName: "io.github.silverstone.wpal"
 
   required property int workspaceId
+  // Set when this dialog is editing a scratchpad (Model.js "scratchpads")
+  // instead of a workspace: the background controls and Clone go away, and
+  // "Set BG" becomes the pad's slide-direction toggle.
+  property string padKey: ""
+  readonly property bool padMode: root.padKey !== ""
+  property string slideFrom: "top"
+  signal slideFromRequested(string side)
   property var cfg: ({ background: { mode: "default", path: "" }, panes: [], autoLaunchEnabled: true })
   property string previewPath: ""
   property color foreground: Color.foreground
@@ -538,7 +545,8 @@ Item {
 
         Text {
           textFormat: Text.PlainText
-          text: "WS" + (root.workspaceId === 10 ? "10 (0)" : String(root.workspaceId))
+          text: root.padMode ? "Scratchpad " + root.padKey
+            : "WS" + (root.workspaceId === 10 ? "10 (0)" : String(root.workspaceId))
           color: root.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.heading
@@ -582,7 +590,8 @@ Item {
         horizontalPadding: Style.spacing.sm
         // Still width-matched to "Set" even though it has since moved to the
         // far right of this row -- kept for consistent pill sizing.
-        implicitWidth: setButton.implicitWidth
+        // (slideButton holds that spot on a scratchpad, where Set BG is hidden.)
+        implicitWidth: root.padMode ? slideButton.implicitWidth : setButton.implicitWidth
         // Counts up as slots fill, and the button itself vanishes at 4.
         property bool tipOn: false
         onHovered: function(isHovered) { addLauncherButton.tipOn = isHovered }
@@ -597,8 +606,29 @@ Item {
       // past the "..." to the row's own right edge -- now the rightmost
       // control, with poolResetButton and settingsDots making room for it
       // below instead of anchoring straight to parent.right.
+      // Scratchpad only, in "Set BG"'s spot: which edge the pad slides in
+      // from. A click flips it.
+      Button {
+        id: slideButton
+        visible: root.padMode
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.slideFrom === "bottom" ? "\u25b2 Bottom" : "\u25bc Top"
+        bordered: true
+        foreground: root.foreground
+        horizontalPadding: Style.spacing.sm
+        property bool tipOn: false
+        onHovered: function(isHovered) { slideButton.tipOn = isHovered }
+        SsToolTip {
+          visible: slideButton.tipOn
+          text: (root.slideFrom === "bottom" ? "Rises from the bottom" : "Drops from the top") + "\nclick to flip"
+        }
+        onClicked: root.slideFromRequested(root.slideFrom === "bottom" ? "top" : "bottom")
+      }
+
       Button {
         id: setButton
+        visible: !root.padMode
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: "Set BG"
@@ -621,6 +651,7 @@ Item {
 
       Text {
         id: settingsDots
+        visible: !root.padMode
         // Right-justified now, matching the main panel's own "..." row.
         // Steps aside for "Set", the row's other permanent right-end
         // resident.
@@ -707,13 +738,14 @@ Item {
           MouseArea {
             id: previewMouse
             anchors.fill: parent
+            enabled: !root.padMode
             cursorShape: Qt.PointingHandCursor
             onClicked: if (root.outsideSelected) root.browseImageRequested(); else root.browsePoolRequested()
           }
 
           Text {
             anchors.centerIn: parent
-            visible: root.previewPath === ""
+            visible: root.previewPath === "" && !root.padMode
             textFormat: Text.PlainText
             text: "no image set"
             color: Qt.darker(root.foreground, 1.4)
@@ -730,7 +762,7 @@ Item {
           Text {
             anchors.centerIn: parent
             textFormat: Text.PlainText
-            text: root.workspaceId === 10 ? "0" : String(root.workspaceId)
+            text: root.padMode ? root.padKey : (root.workspaceId === 10 ? "0" : String(root.workspaceId))
             // Enabled: a soft tc tone -- the same Qt.darker(foreground, 1.5)
             // "secondary" idiom li's own Auto Launch label uses below.
             // Disabled: the reddish li already uses everywhere else for
@@ -1285,6 +1317,7 @@ Item {
     // even 130ms step, once, and the finished line stays -- across panel
     // opens now, not just this one.
     Item {
+      visible: !root.padMode
       width: column.width
       implicitHeight: cloneBox.implicitHeight
 

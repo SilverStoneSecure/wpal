@@ -13,7 +13,7 @@ source lib/harness.sh
 # desktop. Keyed scenarios fake keypresses with ydotool, which land in
 # whatever window has focus on the REAL session: only run those when nobody
 # is at the keyboard. `all` = key-free only; `keyed` / `everything` opt in.
-KEYFREE_SCENARIOS=(fresh-install replacement-bar settings-write pads)
+KEYFREE_SCENARIOS=(fresh-install replacement-bar settings-write pads pads-ui)
 KEYED_SCENARIOS=(escape-cascade)
 TARGET="${1:-all}"
 

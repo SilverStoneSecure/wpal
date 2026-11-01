@@ -388,3 +388,14 @@ function padPlan(settings, key) {
     fullScreenIndex: launch ? fs : -1
   }
 }
+
+// The panel's editor is driven by one number (Panel.activeWorkspace), so pads
+// get ids of their own past the ten workspaces: S = 101, W = 102, ...
+function padIdFor(key) {
+  var i = PAD_KEYS.indexOf(String(key))
+  return i < 0 ? -1 : 101 + i
+}
+function padKeyForId(id) {
+  var i = Number(id) - 101
+  return (i >= 0 && i < PAD_KEYS.length) ? PAD_KEYS[i] : ""
+}

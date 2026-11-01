@@ -131,6 +131,14 @@ BarWidget {
       return panelLoader.item ? panelLoader.item.setAutoLaunchEnabled(v) !== false : false
     }
     function getSettings(): string { return JSON.stringify(root.settings || {}) }
+    // Opens the panel on one card's editor: a workspace 1-10, or a
+    // scratchpad by its Model.padIdFor id (S = 101, W = 102).
+    function openEditor(id: int): bool {
+      if (!panelLoader.item) return false
+      root.open()
+      panelLoader.item.openWorkspace(id)
+      return true
+    }
     // Patch one scratchpad's settings: key S/W, patch a JSON object with any
     // of panes, autoLaunchEnabled, launchLayout, fullScreenIndex, slideFrom.
     function setPad(key: string, patch: string): bool {

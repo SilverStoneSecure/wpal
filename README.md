@@ -29,6 +29,28 @@ per workspace. Click a card to configure that workspace:
   that workspace while it's empty.
 - **Clone** a workspace's whole setup onto another one.
 
+### Scratchpads
+
+Under the workspace cards is a **Scratchpads** row: `S▲` (Omarchy's own
+Super+S scratchpad) and `W▼`. Each pad gets the same auto-launch editor as a
+workspace — its panes open when the pad is shown **while empty**, and never
+again while something is on it — plus which edge it slides in from (S rises
+from the bottom, W drops from the top by default; click the direction button
+in its editor to flip).
+
+wpal never takes over your keys. Bind the pads yourself in
+`~/.config/hypr/bindings.lua`:
+
+```lua
+local wpal_pad = os.getenv("HOME") .. "/.config/omarchy/plugins/io.github.silverstone.wpal/scripts/wpal-pad.sh"
+hl.unbind("SUPER + S")
+o.bind("SUPER + S", "Scratchpad", wpal_pad .. " S")
+o.bind("SUPER + W", "Scratchpad W", wpal_pad .. " W")  -- Omarchy uses SUPER+W for close window; unbind/move it first
+```
+
+Super+S keeps working without this (auto-launch still fires); binding it
+to `wpal-pad.sh` is only needed for the bottom slide.
+
 Settings live in the plugin's own entry in `~/.config/omarchy/shell.json`
 (`bar.layout.right`, id `io.github.silverstone.wpal`) — the same place every Omarchy
 bar widget keeps its config.
@@ -78,8 +100,10 @@ folder is left in place — delete it yourself if you don't want it kept.
 | `Model.js` | Pure helpers: pane classification, settings migration, layout resolution |
 | `scripts/workspace-autolaunch.sh` | Spawns configured panes for a workspace |
 | `scripts/fetch-wallpaper-repo.sh` | One-shot fetch of an http(s) wallpaper pool into a local cache |
+| `scripts/wpal-pad.sh` | Scratchpad toggle (sets slide direction) and its auto-launch |
 
-Run the click-through test suite with `tests/run.sh` — see `tests/README.md`.
+Unit tests: `node tests/unit/model.test.js`. Desktop tests: `tests/run.sh`
+(key-free by default) — see `tests/README.md`.
 After changing `Service.qml` or anything it loads, `omarchy restart shell`.
 
 ## License

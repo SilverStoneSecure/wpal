@@ -110,7 +110,8 @@ Item {
     return out
   }
 
-  readonly property string wsLabel: root.workspaceId === 10 ? "10 (0)" : String(root.workspaceId)
+  readonly property string wsLabel: root.workspaceId > 100 ? "Scratchpad " + Model.padKeyForId(root.workspaceId)
+    : "WS" + (root.workspaceId === 10 ? "10 (0)" : String(root.workspaceId))
 
   implicitWidth: column.width
   implicitHeight: column.implicitHeight
@@ -141,7 +142,7 @@ Item {
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         // Two lines: the workspace, then what's being edited.
-        text: "WS" + root.wsLabel + "\nAuto Launch " + (root.slotIndex + 1)
+        text: root.wsLabel + "\nAuto Launch " + (root.slotIndex + 1)
         color: root.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.heading

@@ -461,6 +461,19 @@ Panel {
 
   // Normalized per-workspace config, matching Service.qml's shape.
   function wsSetting(id) {
+    // A scratchpad (id 101+) wears a workspace's shape so the same editor and
+    // card can show it -- with a fixed blank background it never uses.
+    var padKey = Model.padKeyForId(id)
+    if (padKey !== "") {
+      var pad = root.padSetting(padKey)
+      return {
+        background: Model.normalizeBackground({}, root.poolFolder),
+        panes: pad.panes,
+        autoLaunchEnabled: pad.autoLaunchEnabled,
+        launchLayout: pad.launchLayout,
+        fullScreenIndex: pad.fullScreenIndex
+      }
+    }
     var w = (settings && settings.workspaces) ? settings.workspaces[String(id)] : null
     var bg = (w && w.background) || {}
     var panesRaw = w && w.panes
@@ -529,6 +542,11 @@ Panel {
   // Short hover-preview text for a workspace card -- what its dialog would
   // show, without opening it.
   function workspaceSummary(id) {
+    var padKey = Model.padKeyForId(id)
+    if (padKey !== "") {
+      var pad = root.padSetting(padKey)
+      return "Scratchpad " + padKey + " \u2014 " + (pad.slideFrom === "bottom" ? "rises from the bottom" : "drops from the top")
+    }
     var bg = root.wsSetting(id).background
     if (bg.mode === "custom") return "Custom: " + (bg.path ? bg.path.split("/").pop() : "(no image set)")
     if (bg.mode === "random") return "Random from: " + (bg.poolFolder ? bg.poolFolder.split("/").pop() : "")
@@ -536,6 +554,8 @@ Panel {
   }
 
   function updateWorkspace(id, patch) {
+    var padKey = Model.padKeyForId(id)
+    if (padKey !== "") return root.updatePad(padKey, patch)
     var cur = wsSetting(id)
     var merged = {
       background: Object.assign({}, cur.background, patch.background || {}),
@@ -844,6 +864,7 @@ Panel {
   }
 
   function previewFor(id) {
+    if (Model.padKeyForId(id) !== "") return ""
     return root.service ? root.service.previewPath(id) : ""
   }
 
@@ -1562,7 +1583,8 @@ Panel {
           // Height left for the cards below everything above them, split
           // across however many are showing, so the whole list fits on the
           // screen (cards shrink instead of running off the bottom).
-          readonly property int cardRows: root.masterEnabled ? 5 : 1
+          // Custom mode: five workspace rows plus the scratchpad row below.
+          readonly property int cardRows: root.masterEnabled ? 6 : 1
           readonly property int cardCols: root.masterEnabled ? 2 : 1
           readonly property int fitCardH: Math.max(24, Math.floor(
             (cardFrame.maxHeight - Style.spacing.panelPadding * 2 - cardsHost.y - (cardRows - 1) * Style.spacing.lg) / cardRows))
@@ -1638,6 +1660,49 @@ Panel {
               Repeater {
                 model: root.masterEnabled ? [6, 7, 8, 9, 10] : []
                 delegate: cardDelegate
+              }
+            }
+          }
+        }
+
+        // Scratchpads, one card per pad under the two workspace columns:
+        // S (Super+S, rises from the bottom) left, W (drops from the top)
+        // right. Same card and editor as a workspace, addressed by pad id
+        // (Model.padIdFor). Custom mode only, like the rest of auto-launch.
+        Item {
+          id: padsHost
+          visible: root.masterEnabled
+          width: root.settingsWidth
+          implicitHeight: padRow.implicitHeight
+          Row {
+            id: padRow
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Style.spacing.sm
+            Repeater {
+              model: root.masterEnabled ? Model.padKeys() : []
+              delegate: WorkspaceCard {
+                id: padCard
+                required property string modelData
+                readonly property int padId: Model.padIdFor(modelData)
+                readonly property var pad: root.padSetting(modelData)
+                workspaceId: padId
+                label: modelData + (pad.slideFrom === "bottom" ? "\u25b2" : "\u25bc")
+                fullWidth: Math.floor((root.settingsWidth - (cardsHost.cardCols - 1) * Style.spacing.controlGap) / cardsHost.cardCols)
+                maxCardH: cardsHost.fitCardH
+                previewPath: ""
+                clampTarget: cardFrame
+                launchActive: root.launchCountFor(padId) > 0
+                launchRects: root.launchRectsFor(padId)
+                launchEnabled: root.launchEnabledFor(padId)
+                launchFsIndex: root.launchFsIndexFor(padId)
+                panes: pad.panes
+                active: root.activeWorkspace === padId
+                summaryText: root.workspaceSummary(padId)
+                foreground: root.contentForeground
+                onClicked: {
+                  if (root.activeWorkspace === padId) { root.closeDialog(); return }
+                  root.openWorkspace(padId, padCard.mapToItem(null, 0, padCard.height / 2).y)
+                }
               }
             }
           }
@@ -1914,6 +1979,9 @@ Panel {
         x: Style.spacing.panelPadding
         y: Style.spacing.panelPadding
         workspaceId: root.activeWorkspace > 0 ? root.activeWorkspace : 1
+        padKey: Model.padKeyForId(root.activeWorkspace)
+        slideFrom: padKey !== "" ? root.padSetting(padKey).slideFrom : "top"
+        onSlideFromRequested: function(side) { root.updatePad(padKey, { slideFrom: side }) }
         cfg: root.activeWorkspace > 0 ? root.wsSetting(root.activeWorkspace) : ({ background: { mode: "default", path: "", poolFolder: "" }, panes: Model.normalizePanes(null), autoLaunchEnabled: true })
         previewPath: root.activeWorkspace > 0 ? root.previewFor(root.activeWorkspace) : ""
         foreground: root.contentForeground

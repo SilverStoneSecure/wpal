@@ -32,8 +32,12 @@ keyboard.
 ## IPC verbs (BarWidget.qml, target `silverstone`)
 
 `open` · `close` · `toggle` · `isOpen` · `setEnabled <bool>` ·
-`setAutoLaunch <bool>` · `getSettings` — the setters call the same Panel
+`setAutoLaunch <bool>` · `getSettings` · `setPad <S|W> <json>` · `openEditor <id>` — the setters call the same Panel
 functions as the panel's own toggles.
+
+## Unit tests
+
+`node tests/unit/model.test.js` — pure Model.js logic, runs anywhere.
 
 ## Layout
 
@@ -46,6 +50,12 @@ functions as the panel's own toggles.
   not asserted on by the scripts themselves.
 
 ## Scenarios so far
+
+- `pads` (key-free) — scratchpads end to end: rules + plan files, launch
+  only when empty, no double launch, relaunch after emptying, slide
+  direction per pad (and restored after S tucks), pause.
+- `pads-ui` (key-free) — screenshots the Scratchpads row and both pad
+  editors; checks a slide flip is stored.
 
 - `settings-write` (key-free) — regression test for PR #6: after a fresh
   install's seed, flips `enabled` and `autoLaunchEnabled` over IPC and

@@ -16,6 +16,9 @@ Item {
   // Omarchy Default shows one card standing for the whole desktop, so it
   // hides the number; Custom mode's ten all carry theirs.
   property bool showNumber: true
+  // Replaces the number when set -- scratchpad cards show their key and the
+  // edge they slide in from ("S▲", "W▼") instead of a workspace number.
+  property string label: ""
   property string previewPath: ""
   // How long this card waits before fading its new wallpaper in, so a shuffle
   // cascades down the list instead of flipping all ten at once. 0 = no
@@ -151,7 +154,7 @@ Item {
         visible: root.showNumber
         anchors.centerIn: parent
         textFormat: Text.PlainText
-        text: root.workspaceId === 10 ? "0" : String(root.workspaceId)
+        text: root.label !== "" ? root.label : (root.workspaceId === 10 ? "0" : String(root.workspaceId))
         // The number says whether this workspace will auto launch: light when
         // live, red when auto launch is off (globally or for this workspace)
         // -- superseding an earlier red-when-ON/grey-when-OFF scheme, which
